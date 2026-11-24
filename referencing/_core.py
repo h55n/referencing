@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from enum import Enum
-from typing import Any, ClassVar, Generic, Protocol, TypeVar
+from typing import Any, ClassVar, Generic, Protocol, TypeVar, cast
 from urllib.parse import unquote, urldefrag, urljoin
 
 from attrs import evolve, field
@@ -263,6 +263,11 @@ class Resource(Generic[D]):
         contents = self.contents
         segments: list[int | str] = []
         for segment in unquote(pointer[1:]).split("/"):
+            if (
+                isinstance(contents, (str, bytes, bytearray))
+                or not hasattr(cast("object", contents), "__getitem__")
+            ):
+                raise exceptions.PointerToNowhere(ref=pointer, resource=self)
             if isinstance(contents, Sequence):
                 segment = int(segment)
             else:

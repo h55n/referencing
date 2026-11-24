@@ -681,6 +681,62 @@ class TestResource:
         resolver = Registry().resolver()
         assert resource.pointer("/foo/bar/0", resolver=resolver).contents == 3
 
+    @pytest.mark.parametrize(
+        "contents",
+        ["abc", "", b"abc", bytearray(b"abc"), 12, 1.5, True, None],
+    )
+    @pytest.mark.parametrize("pointer", ["/0", "/name"])
+    def test_pointer_cannot_descend_into_scalar(self, contents, pointer):
+        resource = Resource.opaque(contents)
+        with pytest.raises(exceptions.PointerToNowhere) as exc:
+            resource.pointer(pointer, resolver=Registry().resolver())
+        assert exc.value == exceptions.PointerToNowhere(
+            ref=pointer,
+            resource=resource,
+        )
+
+    def test_pointer_cannot_descend_into_nested_string(self):
+        resource = Resource.opaque({"name": "xyz"})
+        with pytest.raises(exceptions.PointerToNowhere) as exc:
+            resource.pointer("/name/0", resolver=Registry().resolver())
+        assert exc.value == exceptions.PointerToNowhere(
+            ref="/name/0",
+            resource=resource,
+        )
+
+    def test_pointer_can_select_string_without_descending(self):
+        resource = Resource.opaque({"name": ["xyz"]})
+        assert resource.pointer(
+            "/name/0", resolver=Registry().resolver(),
+        ).contents == "xyz"
+
+    def test_pointer_preserves_non_list_sequence_support(self):
+        resource = Resource.opaque(("xyz",))
+        assert resource.pointer(
+            "/0", resolver=Registry().resolver(),
+        ).contents == "xyz"
+
+    def test_pointer_cannot_descend_into_string_in_array(self):
+        resource = Resource.opaque({"a": ["xyz"]})
+        with pytest.raises(exceptions.PointerToNowhere):
+            resource.pointer("/a/0/0", resolver=Registry().resolver())
+
+    def test_pointer_into_empty_array(self):
+        resource = Resource.opaque([])
+        with pytest.raises(exceptions.PointerToNowhere):
+            resource.pointer("/0", resolver=Registry().resolver())
+
+    def test_pointer_preserves_custom_subscriptable_support(self):
+        class Subscriptable:
+            def __getitem__(self, key):
+                assert key == "a/b"
+                return "xyz"
+
+        resource = Resource.opaque(Subscriptable())
+        assert resource.pointer(
+            "/a~1b", resolver=Registry().resolver(),
+        ).contents == "xyz"
+
     def test_root_pointer(self):
         contents = {"foo": "baz"}
         resource = Resource.opaque(contents=contents)
